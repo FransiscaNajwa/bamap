@@ -1,11 +1,11 @@
 <?php
 // Pengaturan Koneksi
-$host = "localhost";
-$user = "root"; 
-$pass = ""; 
-$dbname = "berthing_db"; // Nama database yang Anda buat di phpMyAdmin
+define('DB_HOST', 'localhost');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+define('DB_NAME', 'ba_map');
 
-$conn = new mysqli($host, $user, $pass, $dbname);
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 
 // Cek Koneksi
 if ($conn->connect_error) {

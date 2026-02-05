@@ -8,12 +8,33 @@ document.addEventListener('DOMContentLoaded', () => {
     let shipSchedules = [];
 
 async function fetchShipsFromDB() {
-    const response = await fetch('get_all_data.php'); // Ambil dari PHP
-    const data = await response.json();
-    shipSchedules = data.shipSchedules; // Isi variabel global
-    updateDisplay(); // Gambar ulang peta dermaga
-}
+    try {
+        const response = await fetch('get_all_data.php'); // Fetch data from backend
+        const data = await response.json();
 
+        if (data.shipSchedules) {
+            shipSchedules = data.shipSchedules; // Save ship schedules
+        } else {
+            console.error('Data shipSchedules tidak ditemukan:', data);
+        }
+
+        if (data.maintenanceSchedules) {
+            maintenanceSchedules = data.maintenanceSchedules; // Save maintenance schedules
+        } else {
+            console.error('Data maintenanceSchedules tidak ditemukan:', data);
+        }
+
+        if (data.restSchedules) {
+            restSchedules = data.restSchedules; // Save rest schedules
+        } else {
+            console.error('Data restSchedules tidak ditemukan:', data);
+        }
+
+        updateDisplay(); // Re-render the display
+    } catch (error) {
+        console.error('Error saat mengambil data dari backend:', error);
+    }
+}
 // Jalankan saat aplikasi mulai
 fetchShipsFromDB();
 
@@ -119,7 +140,8 @@ fetchShipsFromDB();
 
             // --- Hitung Vertikal (Tetap sama) ---
             const kdUnitPx = KD_HEIGHT_UNIT / (KD_MARKERS[1] - KD_MARKERS[0]);
-            const top = (ship.berthLocation - KD_MIN) * kdUnitPx;
+            const berthStartKd = ship.berthStartKd ?? ship.berthLocation;
+            const top = (berthStartKd - KD_MIN) * kdUnitPx;
             const calculatedHeight = ship.length * kdUnitPx;
             const height = Math.max(calculatedHeight, KD_HEIGHT_UNIT / 2); 
             const finalTop = Math.max(top, 0);
@@ -159,7 +181,7 @@ fetchShipsFromDB();
             
             const bodyTextLines = [
                 `${ship.length || '?'}m /${ship.draft || '?'} /${ship.destPort || '-'} `,
-                `${ship.berthSide || '?'} / ${ship.berthLocation || '?'} / ${ship.nKd || '?'} / ${ship.minKd || '?'}`,
+                `${ship.berthSide || '?'} / ${berthStartKd || '?'} / ${ship.nKd || '?'} / ${ship.minKd || '?'}`,
                 `<b>${formatDateTime(eta).replace(' / ', '/')} / ${formatDateTime(etb).replace(' / ', '/')} / ${formatDateTime(etc).replace(' / ', '/')} / ${formatDateTime(etd).replace(' / ', '/')}</b>`,
                 `D ${ship.dischargeValue || 0} / L ${ship.loadValue || 0}`,
             ];
@@ -288,8 +310,9 @@ fetchShipsFromDB();
     }
 
     
-    function renderRestTimes() {
+    function renderRestSchedules() {
         grid.querySelectorAll('.rest-block').forEach(el => el.remove());
+
         const weekStart = new Date(currentStartDate);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekEnd.getDate() + 7);
@@ -356,32 +379,54 @@ fetchShipsFromDB();
         const data = [];
 
         rows.forEach(row => {
-            const cells = row.querySelectorAll('td[contenteditable="true"]');
-            if (cells.length === 6) {
-                const rowData = {
-                    dateTime: cells[0].textContent,
-                    petugas: cells[1].textContent,
-                    stakeholder: cells[2].textContent,
-                    pic: cells[3].textContent,
-                    remark: cells[4].textContent,
-                    commChannel: cells[5].textContent,
-                };
-                data.push(rowData);
-            }
+            const rowData = {
+                shipName: row.querySelector('.ship-name').textContent,
+                company: row.querySelector('.company-name').textContent,
+                code: row.querySelector('.ship-code').textContent,
+                length: row.querySelector('.ship-length').textContent,
+                draft: row.querySelector('.ship-draft').textContent,
+                destPort: row.querySelector('.dest-port').textContent,
+                berthLocation: row.querySelector('.berth-location').textContent,
+                nKd: row.querySelector('.n-kd').textContent,
+                minKd: row.querySelector('.min-kd').textContent,
+                loadValue: row.querySelector('.load-value').textContent,
+                dischargeValue: row.querySelector('.discharge-value').textContent,
+                etaTime: row.querySelector('.eta-time').textContent,
+                startTime: row.querySelector('.start-time').textContent,
+                etcTime: row.querySelector('.etc-time').textContent,
+                endTime: row.querySelector('.end-time').textContent,
+                status: row.querySelector('.status').textContent,
+                berthSide: row.querySelector('.berth-side').textContent,
+                bsh: row.querySelector('.bsh').textContent,
+                qccName: row.querySelector('.qcc-name').textContent,
+                mean: row.querySelector('.mean').textContent,
+            };
+            data.push(rowData);
         });
 
-        // Ganti localStorage.setItem('shipSchedules', ...) dengan:
-fetch('save_ship.php', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(shipData)
-})
-.then(res => res.json())
-.then(result => {
-    alert("Data tersimpan ke SQL!");
-    fetchShipsFromDB(); // Refresh data
-});
+        console.log('Data yang dikirim ke backend:', data[0]);
+
+        fetch('save_ship.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data[0]) // Assuming only one row is sent for now
+        })
+        .then(res => res.json())
+        .then(result => {
+            console.log('Response from save_ship.php:', result);
+            if (result.status === 'success') {
+                alert('Data berhasil disimpan!');
+                fetchShipsFromDB(); // Refresh the data
+            } else {
+                alert('Gagal menyimpan data: ' + result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error saat menyimpan data:', error);
+            alert('Terjadi kesalahan saat menyimpan data.');
+        });
     }
+
     function loadCommLog() {
         const data = JSON.parse(localStorage.getItem('communicationLogData'));
         if (!data) return;
@@ -685,7 +730,7 @@ fetch('save_ship.php', {
         weekDatePicker.value = formatDateForDateInput(currentStartDate);
 
         drawGrid(); 
-        renderRestTimes();
+        renderRestSchedules();
         renderMaintenance();
         renderShips();
     }
@@ -780,9 +825,21 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
         restSubmitBtn.textContent = 'Update';
         restForm.classList.add('edit-mode');
         deleteRestBtn.onclick = () => {
-            if (confirm('Anda yakin ingin menghapus waktu istirahat ini?')) {
-                restSchedules.splice(editingRestIndex, 1);
-                localStorage.setItem('restSchedules', JSON.stringify(restSchedules));
+            if (confirm('Anda yakin ingin menghapus data istirahat ini?')) {
+                const restId = restSchedules[editingRestIndex].id; // Ambil ID asli DB
+                fetch(`delete_data.php?type=rest&id=${restId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Respons dari backend:', data);
+                        if (data.status === 'success') {
+                            fetchShipsFromDB(); // Refresh tampilan
+                            restModal.style.display = 'none';
+                        } else {
+                            console.error('Gagal menghapus data:', data.message);
+                            alert('Gagal menghapus data: ' + data.message);
+                        }
+                    })
+                    .catch(error => console.error('Gagal menghapus data istirahat:', error));
                 updateDisplay();
                 restModal.style.display = 'none';
                 restForm.classList.remove('edit-mode');
@@ -1117,7 +1174,25 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
         shipData.qccName = checkedQCCs.join(' & ');
 
             if (editingShipIndex !== null) {
-                shipSchedules[editingShipIndex] = shipData;
+                shipData.id = shipSchedules[editingShipIndex].id;
+                fetch('update_ship.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(shipData)
+                })
+                .then(res => res.json())
+                .then(result => {
+                    if (result.status === "success") {
+                        fetchShipsFromDB();
+                        modal.style.display = 'none';
+                    } else {
+                        alert('Gagal update data: ' + (result.message || 'unknown error'));
+                    }
+                })
+                .catch(err => {
+                    console.error('Error update data:', err);
+                    alert('Terjadi kesalahan saat update data.');
+                });
             } else {
                  fetch('save_ship.php', {
                     method: 'POST',
@@ -1129,8 +1204,14 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
                     if (result.status === "success") {
                         fetchShipsFromDB(); // Ambil data terbaru dari server
                         modal.style.display = 'none';
+                    } else {
+                        alert('Gagal menyimpan data: ' + (result.message || 'unknown error'));
                     }
-                }); 
+                })
+                .catch(err => {
+                    console.error('Error saat menyimpan data:', err);
+                    alert('Terjadi kesalahan saat menyimpan data.');
+                });
             }
             modal.style.display = 'none';
             shipForm.classList.remove('edit-mode');
@@ -1156,33 +1237,36 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
         });
         maintenanceForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const startTime = maintenanceForm.elements['startTime'].value;
-            const endTime = maintenanceForm.elements['endTime'].value;
-            if (new Date(endTime) <= new Date(startTime)) {
-                alert("Waktu Selesai harus setelah Waktu Mulai.");
-                return;
-            }
-
             const formData = new FormData(maintenanceForm);
-            const data = Object.fromEntries(formData.entries());
-            data.startKd = parseInt(data.startKd, 10);
-            data.endKd = parseInt(data.endKd, 10); 
-
-            if (data.endKd <= data.startKd) {
-                alert("End KD harus lebih besar dari Start KD.");
-                return;
-            }
-
-            if (editingMaintenanceIndex !== null) {
-                maintenanceSchedules[editingMaintenanceIndex] = data;
-            } else {
-                maintenanceSchedules.push(data);
-            }
-            localStorage.setItem('maintenanceSchedules', JSON.stringify(maintenanceSchedules));
-            updateDisplay();
-            maintenanceModal.style.display = 'none';
-            maintenanceForm.classList.remove('edit-mode');
+            const maintenanceData = Object.fromEntries(formData.entries());
+            maintenanceData.startKd = parseInt(maintenanceData.startKd, 10);
+            maintenanceData.endKd = parseInt(maintenanceData.endKd, 10);
+            saveMaintenanceData(maintenanceData);
+            console.log('Data yang dikirim ke save_maintenance.php:', maintenanceData);
         });
+
+        async function saveMaintenanceData(maintenanceData) {
+            try {
+                const response = await fetch('save_maintenance.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(maintenanceData)
+                });
+                const result = await response.json();
+                console.log('Response from save_maintenance.php:', result);
+                if (result.status === "success") {
+                    alert('Data maintenance berhasil disimpan!');
+                    maintenanceModal.style.display = 'none'; // Close the modal
+                    maintenanceForm.classList.remove('edit-mode'); // Reset the modal state
+                    fetchShipsFromDB(); // Refresh data
+                } else {
+                    alert('Gagal menyimpan data maintenance: ' + (result.message || 'unknown error'));
+                }
+            } catch (error) {
+                console.error('Error saat menyimpan data maintenance:', error);
+                alert('Terjadi kesalahan saat menyimpan data maintenance.');
+            }
+        }
 
         addRestBtn.addEventListener('click', () => {
             editingRestIndex = null;
@@ -1206,17 +1290,32 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
                 return;
             }
             const formData = new FormData(restForm);
-            const data = Object.fromEntries(formData.entries());
-            if (editingRestIndex !== null) {
-                restSchedules[editingRestIndex] = data;
-            } else {
-                restSchedules.push(data);
-            }
-            localStorage.setItem('restSchedules', JSON.stringify(restSchedules));
-            updateDisplay();
-            restModal.style.display = 'none';
-            restForm.classList.remove('edit-mode');
+            const restData = Object.fromEntries(formData.entries());
+            saveRestData(restData);
         });
+
+        async function saveRestData(restData) {
+            try {
+                const response = await fetch('save_break.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(restData)
+                });
+                const result = await response.json();
+                console.log('Response from save_break.php:', result);
+                if (result.status === "success") {
+                    alert('Data istirahat berhasil disimpan!');
+                    restModal.style.display = 'none'; // Close the modal
+                    restForm.classList.remove('edit-mode'); // Reset the modal state
+                    fetchShipsFromDB(); // Refresh data
+                } else {
+                    alert('Gagal menyimpan data istirahat: ' + (result.message || 'unknown error'));
+                }
+            } catch (error) {
+                console.error('Error saat menyimpan data istirahat:', error);
+                alert('Terjadi kesalahan saat menyimpan data istirahat.');
+            }
+        }
 
         const commLogCells = document.querySelectorAll('#comm-log-table td[contenteditable="true"]');
         commLogCells.forEach(cell => {
