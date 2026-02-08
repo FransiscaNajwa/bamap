@@ -297,6 +297,7 @@ h2#report-subtitle {
 .ship-content {
     position: absolute;
     top: 0;
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -307,19 +308,36 @@ h2#report-subtitle {
     font-family: 'Consolas', 'Courier New', monospace;
     color: #333;
     overflow: hidden;
+    background-clip: padding-box;
+    text-align: left;
+    left: 0;
 }
 
 .ship-header {
     position: relative;
-    padding: 3px 6px;
+    padding: 2px 6px 2px 6px;
     font-weight: bold;
-    font-size: 0.9em;
+    font-size: 0.95em;
     border-bottom: 1px dashed #ccc;
     background-color: #ffffff;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
     flex-wrap: wrap;
+}
+
+.ship-body {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    padding: 2px 6px 28px 6px;
+    font-size: 0.95em;
+    line-height: 1.2;
+    white-space: pre-wrap;
+    width: 100%;
+    box-sizing: border-box;
 }
 .ship-header span:first-child {
     margin-right: 10px;
@@ -356,15 +374,17 @@ h2#report-subtitle {
     bottom: -2px;
     left: 0;
     width: 100%;
-    height: 24px;
+    height: 28px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0 8px;
-    font-size: 1.1em;
+    font-size: 0.95em;
     font-weight: bold;
     color: black;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    text-shadow: none;
+    background-color: #00c853;
+    border-top: 2px solid #00a640;
     box-sizing: border-box;
 }
 
@@ -377,6 +397,42 @@ h2#report-subtitle {
     text-align: center;
     flex-grow: 1;
     padding: 0 5px;
+}
+
+.ship-qcc-list {
+    margin-top: 6px;
+    width: 100%;
+}
+
+.ship-qcc-item {
+    margin-top: 4px;
+}
+
+.ship-qcc-text {
+    font-weight: bold;
+    margin-bottom: 2px;
+    font-size: 0.95em;
+}
+
+.ship-qcc-line {
+    border-top: 2px dashed #333;
+    opacity: 0.8;
+}
+
+.ship-qcc-line.qcc01 {
+    border-top-color: #d14c62ff;
+}
+
+.ship-qcc-line.qcc02 {
+    border-top-color: #0000ff;
+}
+
+.ship-qcc-line.qcc03 {
+    border-top-color: #17a2b8;
+}
+
+.ship-qcc-line.qcc04 {
+    border-top-color: #b5a02aff;
 }
 
 .modal {
@@ -448,24 +504,32 @@ h2#report-subtitle {
     box-sizing: border-box;
     font-size: 1em;
 }
+
+select,
+select option {
+    font-size: 1em;
+}
 #ship-form small,
 #maintenance-form small,
 #rest-form small {
     color: #666;
 }
 .ship-header-text {
-    line-height: 1.2;
+    line-height: 1.15;
+    text-align: left;
 }
 .ship-main-title {
     display: block;
-    font-size: 1.5em; 
+    font-size: 1.05em; 
     color: #000;
+    margin: 0;
 }
 .ship-sub-title {
     display: block;
-    font-size: 1.5em; 
+    font-size: 1em; 
     color: #000000;
     font-weight: bold;
+    margin: 0;
 }
 
 .legends-scroll-container {

@@ -106,15 +106,16 @@ CREATE TABLE `ship_schedules` (
   `berthSide` varchar(50) DEFAULT NULL,
   `bsh` int(11) DEFAULT NULL,
   `qccName` text DEFAULT NULL,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `shipping_company_id` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `ship_schedules`
 --
 
-INSERT INTO `ship_schedules` (`id`, `company`, `shipName`, `code`, `length`, `draft`, `destPort`, `berthLocation`, `nKd`, `minKd`, `loadValue`, `dischargeValue`, `etaTime`, `startTime`, `etcTime`, `endTime`, `status`, `berthSide`, `bsh`, `qccName`, `created_at`) VALUES
-(1, 'CTP', 'ghjj', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-02-05 07:03:35');
+INSERT INTO `ship_schedules` (`id`, `company`, `shipName`, `code`, `length`, `draft`, `destPort`, `berthLocation`, `nKd`, `minKd`, `loadValue`, `dischargeValue`, `etaTime`, `startTime`, `etcTime`, `endTime`, `status`, `berthSide`, `bsh`, `qccName`, `created_at`, `shipping_company_id`) VALUES
+(1, 'CTP', 'ghjj', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-02-05 07:03:35', NULL);
 
 -- --------------------------------------------------------
 
@@ -171,7 +172,8 @@ ALTER TABLE `rest_schedules`
 --
 ALTER TABLE `ship_schedules`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `fk_ship_berth` (`berthLocation`);
+  ADD KEY `fk_ship_berth` (`berthLocation`),
+  ADD KEY `fk_ship_company` (`shipping_company_id`);
 
 --
 -- Indexes for table `stakeholders`
@@ -227,7 +229,31 @@ ALTER TABLE `stakeholders`
 -- Constraints for table `ship_schedules`
 --
 ALTER TABLE `ship_schedules`
-  ADD CONSTRAINT `fk_ship_berth` FOREIGN KEY (`berthLocation`) REFERENCES `berths` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+  ADD CONSTRAINT `fk_ship_berth` FOREIGN KEY (`berthLocation`) REFERENCES `berths` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_ship_company` FOREIGN KEY (`shipping_company_id`) REFERENCES `shipping_companies` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+--
+-- Tabel master data untuk nama pelayaran
+--
+CREATE TABLE `shipping_companies` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(255) NOT NULL UNIQUE,
+  `code` VARCHAR(50) NOT NULL UNIQUE,
+  `flag_image` VARCHAR(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Menambahkan data nama pelayaran ke tabel shipping_companies
+INSERT INTO `shipping_companies` (`name`, `code`, `flag_image`) VALUES
+('SPIL', 'SPIL', NULL),
+('CTP', 'CTP', NULL),
+('MERATUS', 'MERATUS', NULL),
+('TANTO', 'TANTO', NULL),
+('PPNP', 'PPNP', NULL),
+('ICON', 'ICON', NULL),
+('TEMAS LINE', 'TEMAS', NULL),
+('LAINNYA', 'LAINNYA', NULL);
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

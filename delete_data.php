@@ -1,6 +1,9 @@
 <?php
 include 'db_config.php';
-header('Content-Type: application/json');
+header('Content-Type: application/json'); // Ensure headers are sent correctly
+
+// Ensure output buffering starts at the very beginning
+if (ob_get_level() == 0) ob_start();
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $type = isset($_GET['type']) ? $_GET['type'] : '';
@@ -12,6 +15,10 @@ $tableMap = [
 ];
 
 error_log("Received parameters: ID = $id, Type = $type");
+
+// Debugging: Check if output buffering is active
+error_log("Output buffering level: " . ob_get_level());
+error_log("Headers sent: " . (headers_sent() ? 'Yes' : 'No'));
 
 if ($id > 0 && array_key_exists($type, $tableMap)) {
     $tableName = $tableMap[$type];
@@ -48,4 +55,7 @@ if ($id > 0 && array_key_exists($type, $tableMap)) {
     error_log("Invalid parameters: ID = $id, Type = $type");
     echo json_encode(["status" => "error", "message" => "Invalid parameters"]);
 }
+
+// Flush the buffer at the end of the script
+ob_end_flush();
 ?>

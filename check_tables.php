@@ -1,14 +1,15 @@
 <?php
 include 'db_config.php';
 
-header('Content-Type: text/plain');
+header('Content-Type: application/json');
 
-$result = $conn->query('SHOW TABLES');
-if ($result) {
-    while ($row = $result->fetch_array()) {
-        print_r($row);
-    }
-} else {
-    echo "Error: " . $conn->error;
+$response = [];
+
+try {
+    $tables = $conn->query("SHOW TABLES");
+    $response['tables'] = $tables->fetch_all(MYSQLI_ASSOC);
+    echo json_encode($response);
+} catch (Exception $e) {
+    echo json_encode(["status" => "error", "message" => $e->getMessage()]);
 }
 ?>

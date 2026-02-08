@@ -31,26 +31,9 @@ $berthSide = $data['berthSide'] ?? null;
 $bsh = $data['bsh'] ?? null;
 $qccName = $data['qccName'] ?? null;
 
-// Map KD ke ID berth (kolom berthLocation adalah FK ke berths.id)
-$berthId = null;
-if ($berthLocation !== null && $berthLocation !== '') {
-    $lookup = $conn->prepare("SELECT id FROM berths WHERE ? BETWEEN startKd AND endKd LIMIT 1");
-    if (!$lookup) {
-        echo json_encode(["status" => "error", "message" => $conn->error]);
-        exit;
-    }
-    $lookup->bind_param("i", $berthLocation);
-    $lookup->execute();
-    $lookup->bind_result($foundBerthId);
-    if ($lookup->fetch()) {
-        $berthId = $foundBerthId;
-    }
-    $lookup->close();
-}
-
-if ($berthId === null) {
-    echo json_encode(["status" => "error", "message" => "Berth untuk KD tidak ditemukan. Pastikan tabel berths terisi."]);
-    exit;
+// Simpan nilai KD langsung ke berthLocation tanpa validasi ke tabel berths
+if ($berthLocation === '') {
+    $berthLocation = null;
 }
 
 if ($bsh === '' || $bsh === null) {
@@ -78,7 +61,7 @@ $stmt->bind_param(
     $length,
     $draft,
     $destPort,
-    $berthId,
+    $berthLocation,
     $nKd,
     $minKd,
     $loadValue,

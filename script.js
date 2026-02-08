@@ -9,42 +9,94 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function fetchShipsFromDB() {
     try {
-        const response = await fetch('get_all_data.php'); // Fetch data from backend
+        console.log('Fetching all schedules from database...');
+        const response = await fetch('get_all_data.php');
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
-
-        if (data.shipSchedules) {
-            shipSchedules = data.shipSchedules; // Save ship schedules
+        console.log('Data fetched from backend:', data);
+        
+        // Update shipSchedules dari backend
+        if (data && data.shipSchedules) {
+            shipSchedules = data.shipSchedules;
+            console.log('Updated shipSchedules:', shipSchedules);
+            localStorage.setItem('shipSchedules', JSON.stringify(shipSchedules));
         } else {
-            console.error('Data shipSchedules tidak ditemukan:', data);
+            console.error('No shipSchedules found in the response');
         }
-
-        if (data.maintenanceSchedules) {
-            maintenanceSchedules = data.maintenanceSchedules; // Save maintenance schedules
+        
+        // Update maintenanceSchedules dari backend
+        if (data && data.maintenanceSchedules) {
+            maintenanceSchedules = data.maintenanceSchedules;
+            console.log('Updated maintenanceSchedules:', maintenanceSchedules);
+            localStorage.setItem('maintenanceSchedules', JSON.stringify(maintenanceSchedules));
         } else {
-            console.error('Data maintenanceSchedules tidak ditemukan:', data);
+            console.warn('No maintenanceSchedules found in the response');
         }
-
-        if (data.restSchedules) {
-            restSchedules = data.restSchedules; // Save rest schedules
+        
+        // Update restSchedules dari backend
+        if (data && data.restSchedules) {
+            restSchedules = data.restSchedules;
+            console.log('Updated restSchedules:', restSchedules);
+            localStorage.setItem('restSchedules', JSON.stringify(restSchedules));
         } else {
-            console.error('Data restSchedules tidak ditemukan:', data);
+            console.warn('No restSchedules found in the response');
         }
-
-        updateDisplay(); // Re-render the display
+        
+        // Render semua schedule setelah data berhasil di-fetch
+        renderShips();
+        renderMaintenance();
+        renderRestSchedules();
     } catch (error) {
-        console.error('Error saat mengambil data dari backend:', error);
+        console.error('Error fetching schedules from database:', error);
     }
 }
-// Jalankan saat aplikasi mulai
-fetchShipsFromDB();
+// fetchShipsFromDB akan dipanggil di initialize() setelah grid siap
+
+async function fetchQCCNames() {
+    try {
+        console.log('Fetching QCC names from database...');
+        const response = await fetch('get_qcc_names.php');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log('QCC names fetched:', data);
+
+        const qccContainer = document.getElementById('qcc-names-checkboxes');
+        qccContainer.innerHTML = '';
+
+        data.forEach(qcc => {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `qcc-${qcc.id}`;
+            checkbox.value = qcc.name;
+
+            const label = document.createElement('label');
+            label.htmlFor = `qcc-${qcc.id}`;
+            label.textContent = qcc.name;
+
+            const div = document.createElement('div');
+            div.appendChild(checkbox);
+            div.appendChild(label);
+
+            qccContainer.appendChild(div);
+        });
+    } catch (error) {
+        console.error('Error fetching QCC names:', error);
+    }
+}
+// fetchQCCNames akan dipanggil di initialize()
 
     let editingShipIndex = null;
     let currentStartDate = getStartOfWeek(new Date());
 
-    let maintenanceSchedules = JSON.parse(localStorage.getItem('maintenanceSchedules')) || [];
+    let maintenanceSchedules = [];
     let editingMaintenanceIndex = null;
 
-    let restSchedules = JSON.parse(localStorage.getItem('restSchedules')) || [];
+    let restSchedules = [];
     let editingRestIndex = null;
 
     let draggableLineLeft = JSON.parse(localStorage.getItem('draggableLinePosition')) || 200; 
@@ -103,154 +155,135 @@ fetchShipsFromDB();
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekEnd.getDate() + 7);
 
-        // BATAS MAKSIMAL: 7 hari * 24 jam * lebar per jam
-        const MAX_GRID_WIDTH = 7 * 24 * HOUR_WIDTH; 
+        const statusColors = {
+            'VESSEL ALONGSIDE': '#00c853',
+            'VESSEL ON PLOTTING': '#ffff00',
+            'VESSEL ON PLANNING': '#bfbfbf',
+            'VESSEL DEPART': '#9c27b0'
+        };
 
         const visibleShips = shipSchedules.filter(ship => {
-            if (!ship.etaTime || !ship.endTime) return false;
-            const shipETA = new Date(ship.etaTime);
-            const shipETD = new Date(ship.endTime);
-            // Filter: Hanya ambil yang waktunya beririsan dengan minggu ini
-            return shipETA < weekEnd && shipETD > weekStart;
+            if (!ship.startTime || !ship.endTime) {
+                return false;
+            }
+            const shipStart = new Date(ship.startTime);
+            const shipEnd = new Date(ship.endTime);
+            return shipStart < weekEnd && shipEnd > weekStart;
         });
 
-        visibleShips.forEach((ship) => {
-            const shipIndex = shipSchedules.indexOf(ship);
-            const eta = new Date(ship.etaTime);
+        visibleShips.forEach(ship => {
+            const shipWrapper = document.createElement('div');
+            shipWrapper.className = 'ship-wrapper';
+            const shipIndex = shipSchedules.findIndex(item => String(item.id) === String(ship.id));
+            shipWrapper.addEventListener('dblclick', () => editShip(shipIndex >= 0 ? shipIndex : shipSchedules.indexOf(ship)));
+
+            const companyKey = (ship.company || '').toString().trim().toUpperCase();
+            const logoMap = {
+                'SPIL': 'asset/SPIL.png',
+                'TANTO': 'asset/TANTO.png',
+                'MRTS': 'asset/MRTS.png',
+                'PPNP': 'asset/PPNP.png',
+                'SMDR': 'asset/SMDR.png',
+                'CTP': 'asset/CTP.png'
+            };
+            const logoSrc = logoMap[companyKey] || '';
+
+            const eta = (ship.etaTime && !isNaN(new Date(ship.etaTime))) ? new Date(ship.etaTime) : new Date(ship.startTime);
             const etb = new Date(ship.startTime);
             const etc = ship.etcTime ? new Date(ship.etcTime) : null;
             const etd = new Date(ship.endTime);
 
-            if (isNaN(eta) || isNaN(etb) || isNaN(etd)) return;
-
             const getHoursSinceWeekStart = (date) => (date.getTime() - weekStart.getTime()) / (1000 * 60 * 60);
-            
-            // 1. Hitung Posisi Mentah (Bisa minus atau melebihi layar)
-            let rawLeft = getHoursSinceWeekStart(eta) * HOUR_WIDTH;
-            let rawWidth = ((etd.getTime() - eta.getTime()) / (1000 * 60 * 60)) * HOUR_WIDTH;
-            rawWidth = Math.max(rawWidth, HOUR_WIDTH / 2); // Minimal lebar
+            const startHours = Math.max(0, getHoursSinceWeekStart(eta));
+            const endHours = Math.min(7 * 24, getHoursSinceWeekStart(etd));
 
-            // 2. LOGIKA PEMOTONGAN (CLIPPING)
-            let finalLeft = Math.max(0, rawLeft);
-            let leftCropAmount = finalLeft - rawLeft;
-            let rightEdge = Math.min(MAX_GRID_WIDTH, rawLeft + rawWidth);
-            let finalWidth = rightEdge - finalLeft;
-            if (finalWidth <= 0) return;
+            const left = startHours * HOUR_WIDTH;
+            const width = Math.max((endHours - startHours) * HOUR_WIDTH, HOUR_WIDTH / 2);
 
-
-            // --- Hitung Vertikal (Tetap sama) ---
             const kdUnitPx = KD_HEIGHT_UNIT / (KD_MARKERS[1] - KD_MARKERS[0]);
-            const berthStartKd = ship.berthStartKd ?? ship.berthLocation;
-            const top = (berthStartKd - KD_MIN) * kdUnitPx;
-            const calculatedHeight = ship.length * kdUnitPx;
-            const height = Math.max(calculatedHeight, KD_HEIGHT_UNIT / 2); 
-            const finalTop = Math.max(top, 0);
+            const startKd = parseFloat(ship.minKd) || parseFloat(ship.nKd) || KD_MIN;
+            const endKd = parseFloat(ship.nKd) || startKd + (KD_MARKERS[1] - KD_MARKERS[0]);
+            const kdTop = Math.min(startKd, endKd);
+            const kdBottom = Math.max(startKd, endKd);
+            const top = (kdTop - KD_MIN) * kdUnitPx;
+            const height = Math.max((kdBottom - kdTop) * kdUnitPx, KD_HEIGHT_UNIT / 2);
 
+            shipWrapper.style.left = `${left}px`;
+            shipWrapper.style.top = `${Math.max(0, top)}px`;
+            shipWrapper.style.width = `${width}px`;
+            shipWrapper.style.height = `${height}px`;
 
-            // --- Logika Konten di Dalam Wrapper ---
-            let rawContentLeft = ((etb.getTime() - eta.getTime()) / (1000 * 60 * 60)) * HOUR_WIDTH;
-            let rawContentWidth = ((etd.getTime() - etb.getTime()) / (1000 * 60 * 60)) * HOUR_WIDTH;
-            let adjustedContentLeft = rawContentLeft - leftCropAmount;
-            let finalContentLeft = Math.max(0, adjustedContentLeft);
-            let contentCropAmount = finalContentLeft - adjustedContentLeft;
-            let finalContentWidth = rawContentWidth - contentCropAmount;
-            if (finalContentLeft + finalContentWidth > finalWidth) {
-                finalContentWidth = finalWidth - finalContentLeft;
+            const shipContent = document.createElement('div');
+            shipContent.className = 'ship-content';
+
+            const statusColor = statusColors[ship.status] || '#00c853';
+            shipContent.style.borderColor = statusColor;
+
+            const shipHeader = document.createElement('div');
+            shipHeader.className = 'ship-header';
+            shipHeader.style.backgroundColor = '#ffffff';
+
+            const headerText = document.createElement('div');
+            headerText.className = 'ship-header-text';
+            headerText.innerHTML = `
+                <span class="ship-main-title">${ship.shipName || '-'}</span>
+                <span class="ship-sub-title">${ship.code || '-'} / ${ship.company || '-'}</span>
+            `;
+
+            shipHeader.appendChild(headerText);
+
+            if (logoSrc) {
+                const logo = document.createElement('img');
+                logo.className = 'ship-logo';
+                logo.src = logoSrc;
+                logo.alt = `${companyKey} logo`;
+                shipHeader.appendChild(logo);
             }
-            
-            // --- Border untuk Jadwal Kapal ---
-            const company = ship.company ? ship.company.toUpperCase() : 'UNKNOWN';
-            let logoUrl = '', companyColor = '#718096';
-            switch(company) {
-                case 'MERATUS': logoUrl = './MRTS.png'; companyColor = '#001F5B'; break;
-                case 'TANTO':   logoUrl = './TANTO.png'; companyColor = '#00AEEF'; break;
-                case 'SPIL':    logoUrl = './SPIL.png'; companyColor = '#3BB54A'; break;
-                case 'CTP':     logoUrl = './CTP.png'; companyColor = '#B65A0A'; break;
-                case 'PPNP':    logoUrl = './PPNP.png'; companyColor = '#FF0000'; break;
-                case 'LINE':    logoUrl = './Lines.jpg'; companyColor = '#e38111ff'; break;
-                case 'ICON':    logoUrl = './icon.jpg'; companyColor = '#dd15abff'; break;
-            }
-            const statusColors = {
-                "VESSEL ALONGSIDE": "#00c853",
-                "VESSEL ON PLOTTING": "#ffff00",
-                "VESSEL ON PLANNING": "#bfbfbf",
-                "VESSEL DEPART": "#9c27b0",
-                "CRANE/BERTH MAINTENANCE": "#ffc000",
-            };
-            const footerColor = statusColors[ship.status] || '#718096';
-            
-            const bodyTextLines = [
-                `${ship.length || '?'}m /${ship.draft || '?'} /${ship.destPort || '-'} `,
-                `${ship.berthSide || '?'} / ${berthStartKd || '?'} / ${ship.nKd || '?'} / ${ship.minKd || '?'}`,
-                `<b>${formatDateTime(eta).replace(' / ', '/')} / ${formatDateTime(etb).replace(' / ', '/')} / ${formatDateTime(etc).replace(' / ', '/')} / ${formatDateTime(etd).replace(' / ', '/')}</b>`,
-                `D ${ship.dischargeValue || 0} / L ${ship.loadValue || 0}`,
-            ];
 
-            let ccLinesHTML = '';
-            const shipQCCs = ship.qccName ? ship.qccName.split(' & ') : [];
-            
-            if (shipQCCs.length > 0) {
-                let linesContent = '';
-                shipQCCs.forEach(qcc => {
-                    let color = '#333'; 
-                    if (qcc.includes('01')) color = '#d14c62ff'; 
-                    else if (qcc.includes('02')) color = '#0000FF'; 
-                    else if (qcc.includes('03')) color = '#17A2B8'; 
-                    else if (qcc.includes('04')) color = '#b5a02aff'; 
-                    
-                    linesContent += `
-                        <div style="display: flex; flex-direction: column; width: 100%; margin-bottom: 4px;">
-                            <span style="color: #333; margin-bottom: 2px;">${qcc}</span>
-                            <div class="cc-line-item" style="border-top: 2px dashed ${color}; width: 100%; height: 0px;"></div>
+            const shipBody = document.createElement('div');
+            shipBody.className = 'ship-body';
+            const nextPort = ship.nextPort || ship.destPort || '-';
+            const timeLine = `${formatDateTime(ship.etaTime)} / ${formatDateTime(ship.startTime)} / ${formatDateTime(ship.etcTime)} / ${formatDateTime(ship.endTime)}`;
+            const qccList = (ship.qccName || '')
+                .toString()
+                .split(/[,\s]+/)
+                .map(q => q.trim())
+                .filter(Boolean);
+            const qccHtml = qccList
+                .map(q => {
+                    const key = q.replace(/\s+/g, '').toUpperCase();
+                    return `
+                        <div class="ship-qcc-item">
+                            <div class="ship-qcc-text">${key}</div>
+                            <div class="ship-qcc-line ${key.toLowerCase()}"></div>
                         </div>
                     `;
-                });
-                ccLinesHTML = `
-                    <div class="cc-lines-container" style="display: flex; flex-direction: column; width: 100%; margin-top: 5px;">
-                        ${linesContent}
-                    </div>
-                `;
-            }
+                })
+                .join('');
 
-            const wrapper = document.createElement('div');
-            wrapper.className = 'ship-wrapper';
-            wrapper.style.top = `${finalTop}px`;
-            wrapper.style.left = `${finalLeft}px`;
-            wrapper.style.width = `${finalWidth}px`; 
-            wrapper.style.height = `${height}px`;
-
-            wrapper.innerHTML = `
-                <div class="ship-content" style="left: ${finalContentLeft}px; width: ${finalContentWidth}px; border-color: ${companyColor};">
-                    
-                    <div class="ship-header">
-                        <div class="ship-header-text">
-                            <span class="ship-main-title">${company} ${ship.shipName || 'N/A'}</span>
-                            <span class="ship-sub-title">${ship.code || 'N/A'}</span>
-                        </div>
-                        ${logoUrl ? `<img src="${logoUrl}" class="ship-logo" alt="${company} logo" onerror="this.style.display='none';"/>` : ''}
-                    </div>
-                    
-                    <div class="ship-body">
-                        <div>${bodyTextLines.join('\n').trim()}</div>
-                        
-                        ${ccLinesHTML}
-                    </div>
-
-                </div>
-                
-                <div class="ship-footer" style="background-color: ${footerColor};">
-                    <span class="footer-left"></span>
-                    <span class="footer-center">${ship.status || 'N/A'}</span>
-                    <span class="footer-right">BSH: ${ship.bsh || ''} / ${ship.berthSide || ''}</span>
-                </div>
+            shipBody.innerHTML = `
+                ${ship.length || '-'}m / ${ship.draft || '-'} / ${ship.destPort || '-'} / ${nextPort}<br>
+                ${ship.berthSide || '-'} / ${ship.minKd || '-'} / ${ship.nKd || '-'} / ${ship.mean || '-'}<br>
+                ${timeLine}<br>
+                D ${ship.dischargeValue || '-'} / L ${ship.loadValue || '-'}
+                ${qccHtml ? `<br><div class="ship-qcc-list">${qccHtml}</div>` : ''}
             `;
-            
-            wrapper.addEventListener('dblclick', () => editShip(shipIndex));
-            wrapper.title = 'Double click untuk mengedit';
-            grid.appendChild(wrapper); 
+
+            const shipFooter = document.createElement('div');
+            shipFooter.className = 'ship-footer';
+            shipFooter.innerHTML = `
+                <span class="footer-left">${ship.status || 'VESSEL'}</span>
+                <span class="footer-right">BSH: ${ship.bsh || '-'} / ${ship.berthSide || '-'}</span>
+            `;
+
+            shipContent.appendChild(shipHeader);
+            shipContent.appendChild(shipBody);
+            shipContent.appendChild(shipFooter);
+            shipWrapper.appendChild(shipContent);
+
+            grid.appendChild(shipWrapper);
         });
     }
-
 
     function renderMaintenance() {
         grid.querySelectorAll('.maintenance-block, .no-vessel-block').forEach(el => el.remove());
@@ -262,7 +295,10 @@ fetchShipsFromDB();
         const MAX_GRID_WIDTH = 7 * 24 * HOUR_WIDTH; 
 
         const visibleMaintenance = maintenanceSchedules.filter(item => {
-            if (!item.startTime || !item.endTime) return false;
+            if (!item.startTime || !item.endTime) {
+                console.warn('Invalid maintenance data:', item);
+                return false;
+            }
             const startTime = new Date(item.startTime);
             const endTime = new Date(item.endTime);
             return startTime < weekEnd && endTime > weekStart;
@@ -277,7 +313,6 @@ fetchShipsFromDB();
             let rawLeft = getHoursSinceWeekStart(startTime) * HOUR_WIDTH;
             let rawWidth = ((endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)) * HOUR_WIDTH;
             
-            // LOGIKA PEMOTONGAN
             let finalLeft = Math.max(0, rawLeft);
             let rightEdge = Math.min(MAX_GRID_WIDTH, rawLeft + rawWidth);
             let finalWidth = rightEdge - finalLeft;
@@ -320,7 +355,10 @@ fetchShipsFromDB();
         const MAX_GRID_WIDTH = 7 * 24 * HOUR_WIDTH; // Limit Grid
 
         const visibleRestTimes = restSchedules.filter(item => {
-             if (!item.startTime || !item.endTime) return false;
+             if (!item.startTime || !item.endTime) {
+                console.warn('Invalid rest schedule data:', item);
+                return false;
+            }
             const startTime = new Date(item.startTime);
             const endTime = new Date(item.endTime);
             return startTime < weekEnd && endTime > weekStart;
@@ -334,7 +372,6 @@ fetchShipsFromDB();
             let rawLeft = getHoursSinceWeekStart(startTime) * HOUR_WIDTH;
             let rawWidth = ((endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)) * HOUR_WIDTH;
 
-            // LOGIKA PEMOTONGAN
             let finalLeft = Math.max(0, rawLeft);
             let rightEdge = Math.min(MAX_GRID_WIDTH, rawLeft + rawWidth);
             let finalWidth = rightEdge - finalLeft;
@@ -404,12 +441,37 @@ fetchShipsFromDB();
             data.push(rowData);
         });
 
+        // Tambahkan log untuk memeriksa data yang dikirim ke backend
         console.log('Data yang dikirim ke backend:', data[0]);
+
+        // Pastikan semua field memiliki nilai default
+        data[0] = {
+            ...data[0],
+            shipName: data[0].shipName || '',
+            company: data[0].company || '',
+            code: data[0].code || '',
+            length: data[0].length || 0,
+            draft: data[0].draft || 0,
+            destPort: data[0].destPort || '',
+            berthLocation: data[0].berthLocation || null,
+            nKd: data[0].nKd || 0,
+            minKd: data[0].minKd || 0,
+            loadValue: data[0].loadValue || 0,
+            dischargeValue: data[0].dischargeValue || 0,
+            etaTime: data[0].etaTime || null,
+            startTime: data[0].startTime || null,
+            etcTime: data[0].etcTime || null,
+            endTime: data[0].endTime || null,
+            status: data[0].status || '',
+            berthSide: data[0].berthSide || '',
+            bsh: data[0].bsh || null,
+            qccName: data[0].qccName || ''
+        };
 
         fetch('save_ship.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data[0]) // Assuming only one row is sent for now
+            body: JSON.stringify(data[0]) // Kirim data ke PHP
         })
         .then(res => res.json())
         .then(result => {
@@ -517,9 +579,12 @@ fetchShipsFromDB();
         updateDisplay(); 
         setupEventListeners();
         loadCommLog();
-    }
-
-    function drawGrid() {
+    }// Buat grid terlebih dahulu
+        setupEventListeners();
+        loadCommLog();
+        // Fetch data dari database SETELAH grid sudah siap
+        fetchShipsFromDB();
+        fetchQCCNamesid() {
         yAxis.innerHTML = ''; xAxis.innerHTML = ''; hourAxis.innerHTML = ''; berthLabelsContainer.innerHTML = '';
         grid.innerHTML = ''; 
         const gridContainer = grid.parentElement; 
@@ -533,9 +598,6 @@ fetchShipsFromDB();
 
         
         grid.style.position = 'relative'; 
-        grid.style.display = 'grid';
-        grid.style.gridTemplateColumns = `repeat(${totalHours}, ${HOUR_WIDTH}px)`;
-        grid.style.gridTemplateRows = `repeat(${totalKdSteps}, ${KD_HEIGHT_UNIT}px)`;
         grid.style.height = `${(totalKdSteps) * KD_HEIGHT_UNIT}px`;
         grid.style.width = `${totalGridWidth}px`; 
     
@@ -544,6 +606,12 @@ fetchShipsFromDB();
             for (let col = 0; col < totalHours; col++) {
                 const cell = document.createElement('div');
                 cell.classList.add('grid-cell');
+                cell.style.position = 'absolute';
+                cell.style.left = `${col * HOUR_WIDTH}px`;
+                cell.style.top = `${row * KD_HEIGHT_UNIT}px`;
+                cell.style.width = `${HOUR_WIDTH}px`;
+                cell.style.height = `${KD_HEIGHT_UNIT}px`;
+                cell.style.zIndex = '0';
                 grid.appendChild(cell);
             }
         }
@@ -736,13 +804,22 @@ fetchShipsFromDB();
     }
 
     function fillFormForEdit(ship) {
-        document.getElementById('ship-company').value = ship.company;
+        const companySelect = document.getElementById('ship-company');
+        const companyValue = ship.company || '';
+        const hasCompanyOption = Array.from(companySelect.options).some(opt => opt.value === companyValue);
+        if (companyValue && !hasCompanyOption) {
+            const newOption = document.createElement('option');
+            newOption.value = companyValue;
+            newOption.textContent = companyValue;
+            companySelect.appendChild(newOption);
+        }
+        companySelect.value = companyValue;
         document.getElementById('ship-name').value = ship.shipName;
         document.getElementById('ship-code').value = ship.code;
         document.getElementById('ship-length').value = ship.length;
         document.getElementById('ship-draft').value = ship.draft;
         document.getElementById('dest-port').value = ship.destPort || '';
-        document.getElementById('berth-location').value = ship.berthLocation;
+        document.getElementById('berth-location').value = ship.berthLocation || ship.minKd || '';
         document.getElementById('n-kd').value = ship.nKd || '';
         document.getElementById('min-kd').value = ship.minKd || '';
         document.getElementById('load-value').value = ship.loadValue || 0;
@@ -751,8 +828,8 @@ fetchShipsFromDB();
         document.getElementById('start-time').value = formatForInput(ship.startTime);
         document.getElementById('etc-time').value = formatForInput(ship.etcTime);
         document.getElementById('end-time').value = formatForInput(ship.endTime);
-        document.getElementById('ship-status').value = ship.status;
-        document.getElementById('ship-berth-side').value = ship.berthSide;
+        document.getElementById('ship-status').value = ship.status || 'VESSEL ALONGSIDE';
+        document.getElementById('ship-berth-side').value = ship.berthSide || 'P';
         document.getElementById('ship-bsh').value = ship.bsh || '';
         document.querySelectorAll('#qcc-checkbox-group input[type="checkbox"]').forEach(cb => {
     cb.checked = false;
@@ -760,7 +837,7 @@ fetchShipsFromDB();
 
 const savedQCCs = ship.qccName || ''; 
 if (savedQCCs) {
-    const qccArray = savedQCCs.split(' & ');
+    const qccArray = savedQCCs.split(/\s*[,&]\s*|\s+&\s+/);
     qccArray.forEach(qccValue => {
         const checkbox = document.querySelector(`#qcc-checkbox-group input[value="${qccValue}"]`);
         if (checkbox) {
@@ -832,7 +909,12 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
                     .then(data => {
                         console.log('Respons dari backend:', data);
                         if (data.status === 'success') {
-                            fetchShipsFromDB(); // Refresh tampilan
+                            // Hapus data dari variabel lokal
+                            restSchedules = restSchedules.filter(item => item.id !== restId);
+                            console.log('Data berhasil dihapus dari variabel lokal:', restSchedules);
+
+                            // Perbarui tampilan
+                            updateDisplay();
                             restModal.style.display = 'none';
                         } else {
                             console.error('Gagal menghapus data:', data.message);
@@ -1160,14 +1242,22 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
             }
             const formData = new FormData(shipForm);
             const shipData = Object.fromEntries(formData.entries());
-            shipData.length = parseInt(shipData.length, 10);
-            shipData.draft = parseFloat(shipData.draft);
-            shipData.berthLocation = parseInt(shipData.berthLocation, 10);
-            shipData.nKd = parseInt(shipData.nKd, 10);
-            shipData.minKd = parseInt(shipData.minKd, 10);
-            shipData.bsh = parseInt(shipData.bsh, 10) || null;
-            shipData.loadValue = parseInt(shipData.loadValue, 10) || 0;
-            shipData.dischargeValue = parseInt(shipData.dischargeValue, 10) || 0;
+            const toIntOrNull = (val) => {
+                const parsed = parseInt(val, 10);
+                return Number.isNaN(parsed) ? null : parsed;
+            };
+            const toFloatOrNull = (val) => {
+                const parsed = parseFloat(val);
+                return Number.isNaN(parsed) ? null : parsed;
+            };
+            shipData.length = toFloatOrNull(shipData.length);
+            shipData.draft = toFloatOrNull(shipData.draft);
+            shipData.berthLocation = toIntOrNull(shipData.berthLocation);
+            shipData.nKd = toIntOrNull(shipData.nKd);
+            shipData.minKd = toIntOrNull(shipData.minKd);
+            shipData.bsh = toIntOrNull(shipData.bsh);
+            shipData.loadValue = toIntOrNull(shipData.loadValue) || 0;
+            shipData.dischargeValue = toIntOrNull(shipData.dischargeValue) || 0;
         
         const qccCheckboxes = document.querySelectorAll('#qcc-checkbox-group input[type="checkbox"]:checked');
         const checkedQCCs = Array.from(qccCheckboxes).map(cb => cb.value);
@@ -1402,7 +1492,21 @@ fetch(`delete_data.php?type=ship&id=${shipId}`)
       
 
     } 
-    
     initialize();
 
+    async function checkTables() {
+        try {
+            console.log('Checking database tables...');
+            const response = await fetch('check_tables.php');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            console.log('Tables in database:', data.tables);
+        } catch (error) {
+            console.error('Error checking tables:', error);
+        }
+    }
+    // Call checkTables to verify database tables
+    checkTables();
 });
